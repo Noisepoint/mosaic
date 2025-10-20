@@ -3,6 +3,8 @@ import ImageUploader from './components/ImageUploader';
 import ImagePreview from './components/ImagePreview';
 import MosaicCanvas from './components/MosaicCanvas';
 import Toolbar from './components/Toolbar';
+import { useSelectionUndo, useUndoShortcuts } from './hooks/useUndo';
+import { exportAndDownloadImage } from './utils/exportUtils';
 import './index.css';
 
 function App() {
@@ -10,18 +12,32 @@ function App() {
   const [currentEffect, setCurrentEffect] = useState('mosaic');
   const [mosaicSize, setMosaicSize] = useState(10);
   const [blurRadius, setBlurRadius] = useState(5);
-  const [selections, setSelections] = useState([]);
+
+  // 使用撤销Hook管理选区
+  const [
+    selections,
+    setSelections,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    resetSelections,
+    selectionHistory
+  ] = useSelectionUndo([]);
+
+  // 启用撤销快捷键
+  useUndoShortcuts(undo, redo, imageData !== null);
 
   // 处理图片上传
   const handleImageUpload = (data) => {
     setImageData(data);
-    setSelections([]); // 重置选区
+    resetSelections(); // 重置选区
   };
 
   // 移除图片
   const handleRemoveImage = () => {
     setImageData(null);
-    setSelections([]);
+    resetSelections();
   };
 
   // 处理选区变化
@@ -31,20 +47,42 @@ function App() {
 
   // 撤销操作
   const handleUndo = () => {
-    // 将在Stage 4实现
-    console.log('Undo operation');
+    undo();
   };
 
   // 重做操作
   const handleRedo = () => {
-    // 将在Stage 4实现
-    console.log('Redo operation');
+    redo();
   };
 
   // 导出图片
-  const handleExport = (options) => {
-    // 将在Stage 4实现
-    console.log('Export with options:', options);
+  const handleExport = async (options) => {
+    if (!imageData || selections.length === 0) {
+      alert('请先选择需要打码的区域');
+      return;
+    }
+
+    try {
+      const result = await exportAndDownloadImage(
+        imageData,
+        selections,
+        {
+          currentEffect,
+          mosaicSize,
+          blurRadius
+        },
+        options
+      );
+
+      if (result.success) {
+        console.log('图片导出成功:', result.filename);
+      } else {
+        alert(`导出失败: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('导出出错:', error);
+      alert('导出失败，请重试');
+    }
   };
 
   return (
@@ -126,8 +164,8 @@ function App() {
                   onBlurRadiusChange={setBlurRadius}
                   onUndo={handleUndo}
                   onRedo={handleRedo}
-                  canUndo={false} // 将在Stage 4实现
-                  canRedo={false} // 将在Stage 4实现
+                  canUndo={canUndo}
+                  canRedo={canRedo}
                   onExport={handleExport}
                   hasSelections={selections.length > 0}
                 />
