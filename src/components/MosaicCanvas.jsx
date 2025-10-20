@@ -1,6 +1,13 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { applyEffectsToSelections } from '../utils/imageUtils';
 
-const MosaicCanvas = ({ imageData, onSelectionChange }) => {
+const MosaicCanvas = ({
+  imageData,
+  onSelectionChange,
+  currentEffect = 'mosaic',
+  mosaicSize = 10,
+  blurRadius = 5
+}) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const overlayCanvasRef = useRef(null);
@@ -12,6 +19,7 @@ const MosaicCanvas = ({ imageData, onSelectionChange }) => {
   const [selections, setSelections] = useState([]);
   const [currentRect, setCurrentRect] = useState(null);
   const [startPoint, setStartPoint] = useState(null);
+  const [showPreview, setShowPreview] = useState(true);
 
   // 坐标映射函数：从显示坐标映射到原图坐标
   const mapToOriginalCoords = useCallback((displayX, displayY) => {
@@ -95,7 +103,7 @@ const MosaicCanvas = ({ imageData, onSelectionChange }) => {
     ctx.setLineDash([]);
   }, [selections, currentRect, mapToDisplayCoords]);
 
-  // 绘制图片
+  // 绘制图片和效果
   const drawImage = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !imageData) return;
@@ -107,15 +115,50 @@ const MosaicCanvas = ({ imageData, onSelectionChange }) => {
       // 清空画布
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 绘制图片
+      // 绘制原始图片
       ctx.drawImage(img, 0, 0, canvasSize.width, canvasSize.height);
 
-      // 绘制覆盖层
+      // 如果有选区且启用预览，应用效果
+      if (showPreview && selections.length > 0) {
+        try {
+          // 获取原始图像数据
+          const originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+          // 计算效果参数（根据缩放调整）
+          const effectParam = currentEffect === 'mosaic'
+            ? Math.max(2, Math.floor(mosaicSize / scale))
+            : Math.max(1, Math.floor(blurRadius / scale));
+
+          // 创建调整后的选区（根据缩放调整坐标）
+          const adjustedSelections = selections.map(selection => ({
+            ...selection,
+            x: selection.x * scale,
+            y: selection.y * scale,
+            width: selection.width * scale,
+            height: selection.height * scale
+          }));
+
+          // 应用效果
+          const processedImageData = applyEffectsToSelections(
+            originalImageData,
+            adjustedSelections,
+            currentEffect,
+            effectParam
+          );
+
+          // 绘制处理后的图像
+          ctx.putImageData(processedImageData, 0, 0);
+        } catch (error) {
+          console.error('应用效果时出错:', error);
+        }
+      }
+
+      // 绘制覆盖层（选区边框）
       drawOverlay();
     };
 
     img.src = imageData.url;
-  }, [imageData, canvasSize, drawOverlay]);
+  }, [imageData, canvasSize, selections, currentEffect, mosaicSize, blurRadius, scale, showPreview, drawOverlay]);
 
   // 初始化画布
   useEffect(() => {

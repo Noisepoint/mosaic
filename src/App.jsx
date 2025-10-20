@@ -109,6 +109,9 @@ function App() {
                 <MosaicCanvas
                   imageData={imageData}
                   onSelectionChange={handleSelectionChange}
+                  currentEffect={currentEffect}
+                  mosaicSize={mosaicSize}
+                  blurRadius={blurRadius}
                 />
               </div>
 
