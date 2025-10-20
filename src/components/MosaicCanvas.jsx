@@ -1,13 +1,16 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { applyEffectsToSelections } from '../utils/imageUtils';
+import { useI18n } from '../i18n.jsx';
 
 const MosaicCanvas = ({
   imageData,
   onSelectionChange,
   currentEffect = 'mosaic',
   mosaicSize = 10,
-  blurRadius = 5
+  blurRadius = 5,
+  selections: externalSelections = []
 }) => {
+  const { t } = useI18n();
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const overlayCanvasRef = useRef(null);
@@ -20,6 +23,7 @@ const MosaicCanvas = ({
   const [currentRect, setCurrentRect] = useState(null);
   const [startPoint, setStartPoint] = useState(null);
   const [showPreview, setShowPreview] = useState(true);
+  const [lastBrushPoint, setLastBrushPoint] = useState(null); // 用于连续涂抹
 
   // 坐标映射函数：从显示坐标映射到原图坐标
   const mapToOriginalCoords = useCallback((displayX, displayY) => {
@@ -59,6 +63,16 @@ const MosaicCanvas = ({
     });
   }, [imageData]);
 
+  // 与父组件同步选区（用于撤销/重做驱动的外部变更）
+  useEffect(() => {
+    // 仅当外部传入与本地不同步时才更新，避免不必要重绘
+    const isDifferent = JSON.stringify(externalSelections) !== JSON.stringify(selections);
+    if (!isDrawing && isDifferent) {
+      setSelections(externalSelections || []);
+      // 不在这里调用 onSelectionChange，避免形成历史记录回环
+    }
+  }, [externalSelections, isDrawing]);
+
   // 绘制选区覆盖层
   const drawOverlay = useCallback(() => {
     const overlayCanvas = overlayCanvasRef.current;
@@ -69,9 +83,10 @@ const MosaicCanvas = ({
 
     // 绘制所有选区
     selections.forEach(selection => {
-      ctx.strokeStyle = '#3b82f6';
+      // 统一使用中性灰边框，避免蓝色干扰
+      ctx.strokeStyle = '#9ca3af';
       ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
+      ctx.setLineDash(selection.type === 'rectangle' ? [5, 5] : []);
 
       if (selection.type === 'rectangle') {
         const displayCoords = mapToDisplayCoords(selection.x, selection.y);
@@ -79,9 +94,18 @@ const MosaicCanvas = ({
 
         ctx.strokeRect(displayCoords.x, displayCoords.y, displaySize.x, displaySize.y);
 
-        // 填充半透明蓝色
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
+        // 使用中性灰色半透明，避免给用户造成颜色偏蓝的错觉
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
         ctx.fillRect(displayCoords.x, displayCoords.y, displaySize.x, displaySize.y);
+      } else if (selection.type === 'brush') {
+        // 画笔：绘制平滑的实心圆形覆盖，不使用虚线边
+        const displayCenter = mapToDisplayCoords(selection.cx, selection.cy);
+        const displayR = selection.r * scale; // r 是原图半径
+        ctx.beginPath();
+        ctx.arc(displayCenter.x, displayCenter.y, displayR, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+        ctx.fill();
       }
     });
 
@@ -130,13 +154,25 @@ const MosaicCanvas = ({
             : Math.max(1, Math.floor(blurRadius / scale));
 
           // 创建调整后的选区（根据缩放调整坐标）
-          const adjustedSelections = selections.map(selection => ({
-            ...selection,
-            x: selection.x * scale,
-            y: selection.y * scale,
-            width: selection.width * scale,
-            height: selection.height * scale
-          }));
+          const adjustedSelections = selections.map(selection => {
+            if (selection.type === 'brush') {
+              // 将圆形刷点转换为与效果处理兼容的矩形包围盒
+              return {
+                x: (selection.cx - selection.r) * scale,
+                y: (selection.cy - selection.r) * scale,
+                width: (selection.r * 2) * scale,
+                height: (selection.r * 2) * scale,
+                type: 'rectangle'
+              };
+            }
+            return {
+              ...selection,
+              x: selection.x * scale,
+              y: selection.y * scale,
+              width: selection.width * scale,
+              height: selection.height * scale
+            };
+          });
 
           // 应用效果
           const processedImageData = applyEffectsToSelections(
@@ -175,10 +211,7 @@ const MosaicCanvas = ({
     drawImage();
   }, [canvasSize, drawImage]);
 
-  // 当选区变化时通知父组件
-  useEffect(() => {
-    onSelectionChange(selections);
-  }, [selections, onSelectionChange]);
+  // 注意：不再在这里自动上报 onSelectionChange，以避免外部同步->内部更新->再次上报导致的历史栈循环。
 
   // 重新绘制覆盖层
   useEffect(() => {
@@ -193,6 +226,7 @@ const MosaicCanvas = ({
     const originalCoords = mapToOriginalCoords(x, y);
 
     setIsDrawing(true);
+    setShowPreview(false); // 绘制中关闭重计算，避免卡顿
     setStartPoint(originalCoords);
 
     if (currentTool === 'rectangle') {
@@ -203,6 +237,16 @@ const MosaicCanvas = ({
         height: 0,
         type: 'rectangle'
       });
+    } else if (currentTool === 'brush') {
+      // 涂抹笔功能 - 使用圆形刷点，记录中心和半径，渲染更顺滑
+      const brushSelection = {
+        cx: originalCoords.x,
+        cy: originalCoords.y,
+        r: Math.max(1, Math.floor(brushSize / 2)),
+        type: 'brush'
+      };
+      setSelections(prev => [...prev, brushSelection]);
+      setLastBrushPoint(originalCoords); // 设置初始点
     }
   };
 
@@ -225,28 +269,91 @@ const MosaicCanvas = ({
         height: Math.abs(height),
         type: 'rectangle'
       });
+    } else if (currentTool === 'brush') {
+      // 涂抹笔连续绘制 - 插值填充空隙（圆形刷点）
+      if (lastBrushPoint) {
+        const distance = Math.sqrt(
+          Math.pow(currentPoint.x - lastBrushPoint.x, 2) +
+          Math.pow(currentPoint.y - lastBrushPoint.y, 2)
+        );
+
+        // 更密集的插值，步距小于等于笔刷半径的 1/3，避免断续
+        const stepSpacing = Math.max(1, Math.floor(brushSize / 4)); // <= r/2
+        const steps = Math.max(1, Math.ceil(distance / stepSpacing));
+
+        setSelections(prev => {
+          const next = [...prev];
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const interpolatedPoint = {
+              x: lastBrushPoint.x + (currentPoint.x - lastBrushPoint.x) * t,
+              y: lastBrushPoint.y + (currentPoint.y - lastBrushPoint.y) * t
+            };
+            next.push({
+              cx: interpolatedPoint.x,
+              cy: interpolatedPoint.y,
+              r: Math.max(1, Math.floor(brushSize / 2)),
+              type: 'brush'
+            });
+          }
+          return next;
+        });
+      }
+
+      setLastBrushPoint(currentPoint);
     }
   };
 
   const handleMouseUp = () => {
     if (isDrawing && currentRect && currentRect.width > 5 && currentRect.height > 5) {
       // 只有矩形选区有实际大小时才添加
-      setSelections(prev => [...prev, currentRect]);
+      const newSelections = [...selections, currentRect];
+      setSelections(newSelections);
+      onSelectionChange(newSelections);
+    }
+    // 画笔：在结束时统一提交一次，避免频繁重绘和历史爆炸
+    if (isDrawing && currentTool === 'brush') {
+      onSelectionChange(selections);
     }
 
     setIsDrawing(false);
     setCurrentRect(null);
     setStartPoint(null);
+    setLastBrushPoint(null); // 重置涂抹笔状态
+    setShowPreview(true); // 恢复预览
+  };
+
+  // 双击删除选区
+  const handleDoubleClick = (e) => {
+    const rect = overlayCanvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const originalCoords = mapToOriginalCoords(x, y);
+
+    // 检查是否双击了某个选区
+    for (let i = selections.length - 1; i >= 0; i--) {
+      const selection = selections[i];
+      if (originalCoords.x >= selection.x &&
+          originalCoords.x <= selection.x + selection.width &&
+          originalCoords.y >= selection.y &&
+          originalCoords.y <= selection.y + selection.height) {
+        deleteSelection(i);
+        break;
+      }
+    }
   };
 
   // 删除选区
   const deleteSelection = (index) => {
-    setSelections(prev => prev.filter((_, i) => i !== index));
+    const newSelections = selections.filter((_, i) => i !== index);
+    setSelections(newSelections);
+    onSelectionChange(newSelections);
   };
 
   // 清空所有选区
   const clearSelections = () => {
     setSelections([]);
+    onSelectionChange([]);
   };
 
   return (
@@ -255,12 +362,12 @@ const MosaicCanvas = ({
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">工具：</span>
+            <span className="text-sm font-medium text-gray-700">{t('tool')}</span>
 
             <button
               onClick={() => setCurrentTool('rectangle')}
               className={`btn-icon ${currentTool === 'rectangle' ? 'tool-active' : ''}`}
-              title="矩形选区"
+              title={t('rectangle')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <rect x="4" y="6" width="16" height="12" strokeWidth={2} />
@@ -270,7 +377,7 @@ const MosaicCanvas = ({
             <button
               onClick={() => setCurrentTool('brush')}
               className={`btn-icon ${currentTool === 'brush' ? 'tool-active' : ''}`}
-              title="画笔涂抹"
+              title={t('brush')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -282,26 +389,33 @@ const MosaicCanvas = ({
               </svg>
             </button>
 
-            <button
-              onClick={() => setCurrentTool('eraser')}
-              className={`btn-icon ${currentTool === 'eraser' ? 'tool-active' : ''}`}
-              title="橡皮擦"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                />
-              </svg>
-            </button>
+  
+            {selections.length > 0 && (
+              <>
+                <div className="w-px h-6 bg-gray-300 mx-2" />
+
+                <button
+                  onClick={clearSelections}
+                  className="btn-icon text-red-500 hover:text-red-700 hover:bg-red-50"
+                  title={t('clearAll')}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                </button>
+              </>
+            )}
           </div>
 
           {/* 画笔大小控制 */}
           {currentTool === 'brush' || currentTool === 'eraser' ? (
             <div className="flex items-center space-x-3">
-              <span className="text-sm text-gray-700">大小：</span>
+              <span className="text-sm text-gray-700">{t('size')}</span>
               <input
                 type="range"
                 min="5"
@@ -336,6 +450,7 @@ const MosaicCanvas = ({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onDoubleClick={handleDoubleClick}
           />
         </div>
 
@@ -352,9 +467,7 @@ const MosaicCanvas = ({
 
       {/* 操作提示 */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <p className="text-sm text-blue-700">
-          💡 提示：选择工具后在图片上拖拽来选择需要打码的区域
-        </p>
+        <p className="text-sm text-blue-700">💡 {t('tips')}</p>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useI18n } from '../i18n.jsx';
 
 const Toolbar = ({
   currentEffect,
@@ -14,15 +15,17 @@ const Toolbar = ({
   onExport,
   hasSelections
 }) => {
+  const { t } = useI18n();
   const [exportFormat, setExportFormat] = useState('png');
   const [exportQuality, setExportQuality] = useState(0.9);
 
+  
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <div className="space-y-4">
         {/* 效果选择 */}
         <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-3">处理效果</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-3">{t('effect')}</h3>
           <div className="flex items-center space-x-4">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
@@ -32,7 +35,7 @@ const Toolbar = ({
                 onChange={(e) => onEffectChange(e.target.value)}
                 className="text-blue-600 focus:ring-blue-500"
               />
-              <span className="text-sm text-gray-700">马赛克</span>
+              <span className="text-sm text-gray-700">{t('mosaic')}</span>
             </label>
 
             <label className="flex items-center space-x-2 cursor-pointer">
@@ -43,7 +46,7 @@ const Toolbar = ({
                 onChange={(e) => onEffectChange(e.target.value)}
                 className="text-blue-600 focus:ring-blue-500"
               />
-              <span className="text-sm text-gray-700">模糊</span>
+              <span className="text-sm text-gray-700">{t('blur')}</span>
             </label>
           </div>
         </div>
@@ -53,7 +56,7 @@ const Toolbar = ({
           {currentEffect === 'mosaic' ? (
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">
-                马赛克大小: {mosaicSize}px
+                {t('mosaicSize')}: {mosaicSize}px
               </label>
               <input
                 type="range"
@@ -71,7 +74,7 @@ const Toolbar = ({
           ) : (
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">
-                模糊强度: {blurRadius}px
+                {t('blurStrength')}: {blurRadius}px
               </label>
               <input
                 type="range"
@@ -93,7 +96,11 @@ const Toolbar = ({
         <div className="space-y-3">
           <div className="flex items-center space-x-2">
             <button
-              onClick={onUndo}
+              onClick={() => {
+                console.log('撤销按钮点击 - canUndo:', canUndo);
+                console.log('onUndo函数:', typeof onUndo);
+                onUndo?.();
+              }}
               disabled={!canUndo}
               className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
               title="撤销 (Ctrl+Z)"
@@ -106,14 +113,14 @@ const Toolbar = ({
                   d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
                 />
               </svg>
-              <span>撤销</span>
+              <span>{t('undo')}</span>
             </button>
 
             <button
               onClick={onRedo}
               disabled={!canRedo}
               className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-              title="重做 (Ctrl+Y)"
+              title="恢复 (Ctrl+Y)"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -123,16 +130,16 @@ const Toolbar = ({
                   d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"
                 />
               </svg>
-              <span>重做</span>
+              <span>{t('redo')}</span>
             </button>
           </div>
 
           {/* 导出设置 */}
           <div className="border-t pt-3">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">导出设置</h3>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t('exportSettings')}</h3>
             <div className="space-y-3">
               <div className="flex items-center space-x-4">
-                <label className="text-sm text-gray-700">格式：</label>
+                <label className="text-sm text-gray-700">{t('format')}：</label>
                 <select
                   value={exportFormat}
                   onChange={(e) => setExportFormat(e.target.value)}
@@ -144,7 +151,7 @@ const Toolbar = ({
 
                 {exportFormat === 'jpg' && (
                   <div className="flex items-center space-x-2">
-                    <label className="text-sm text-gray-700">质量：</label>
+                    <label className="text-sm text-gray-700">{t('quality')}：</label>
                     <select
                       value={exportQuality}
                       onChange={(e) => setExportQuality(Number(e.target.value))}
@@ -164,7 +171,7 @@ const Toolbar = ({
                 disabled={!hasSelections}
                 className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {hasSelections ? '导出图片' : '请先选择打码区域'}
+                {hasSelections ? t('exportImage') : t('pleaseSelect')}
               </button>
             </div>
           </div>
@@ -173,7 +180,7 @@ const Toolbar = ({
         {/* 快捷键提示 */}
         <div className="text-xs text-gray-500 space-y-1 pt-2 border-t">
           <p>• 按住 Shift 键可以绘制正方形</p>
-          <p>• Ctrl+Z 撤销，Ctrl+Y 重做</p>
+          <p>• Ctrl+Z 撤销，Ctrl+Y 恢复</p>
           <p>• 双击选区可以删除</p>
         </div>
       </div>

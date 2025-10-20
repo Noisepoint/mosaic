@@ -134,12 +134,24 @@ export const useSelectionUndo = (initialSelections = []) => {
    * @param {Array|Function} newSelections - 新选区数组或更新函数
    */
   const setSelections = useCallback((newSelections) => {
+    console.log('=== setSelections Hook调试 ===');
+    console.log('newSelections:', newSelections);
+    console.log('当前selections:', selections);
+
     if (typeof newSelections === 'function') {
-      setSelectionsState(prev => newSelections(prev));
+      console.log('执行函数更新');
+      setSelectionsState(prev => {
+        const result = newSelections(prev);
+        console.log('函数更新结果:', result);
+        return result;
+      });
     } else {
+      console.log('执行直接更新');
       setSelectionsState([...newSelections]);
     }
-  }, [setSelectionsState]);
+
+    console.log('setSelectionsState调用完成');
+  }, [setSelectionsState]); // 移除selections依赖
 
   /**
    * 添加选区

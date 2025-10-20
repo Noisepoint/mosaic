@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getQrCodeUrl, setQrCodeUrl, isAdminMode } from '../config/contact';
+import { getQrCodeUrl, setQrCodeUrl, isAdminMode } from '../../config/contact';
 
 const ContactBlock = () => {
   const [qrCodeUrl, setQrCodeUrlState] = useState(getQrCodeUrl());
@@ -187,14 +187,12 @@ const ContactBlock = () => {
           </div>
         )}
 
-        {/* 管理员访问提示 */}
-        <div className="text-xs text-gray-400 border-t pt-3">
-          {isAdmin ? (
+        {/* 管理员状态显示 */}
+        {isAdmin && (
+          <div className="text-xs text-gray-400 border-t pt-3">
             <p>管理员模式已启用</p>
-          ) : (
-            <p>管理员可通过特定链接访问编辑功能</p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

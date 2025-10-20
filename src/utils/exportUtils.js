@@ -56,11 +56,25 @@ export const createExportedImage = async (imageData, selections, effectOptions, 
           // 获取图像数据
           const imageDataObj = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
+          // 规范化选区：将画笔刷点转换为矩形包围盒
+          const normalizedSelections = selections.map(sel => {
+            if (sel.type === 'brush') {
+              return {
+                x: Math.max(0, sel.cx - sel.r),
+                y: Math.max(0, sel.cy - sel.r),
+                width: Math.min(canvas.width, sel.r * 2),
+                height: Math.min(canvas.height, sel.r * 2),
+                type: 'rectangle'
+              };
+            }
+            return sel;
+          });
+
           // 应用效果
           const effectParam = currentEffect === 'mosaic' ? mosaicSize : blurRadius;
           const processedImageData = applyEffectsToSelections(
             imageDataObj,
-            selections,
+            normalizedSelections,
             currentEffect,
             effectParam
           );

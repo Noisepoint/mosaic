@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ImageUploader from './components/ImageUploader';
 import ImagePreview from './components/ImagePreview';
 import MosaicCanvas from './components/MosaicCanvas';
@@ -7,24 +7,76 @@ import ContactBlock from './components/ContactBlock';
 import { useSelectionUndo, useUndoShortcuts } from './hooks/useUndo';
 import { exportAndDownloadImage } from './utils/exportUtils';
 import './index.css';
+import { I18nProvider, useI18n } from './i18n.jsx';
 
-function App() {
+function AppInner() {
+  const { t, lang, setLang } = useI18n();
   const [imageData, setImageData] = useState(null);
   const [currentEffect, setCurrentEffect] = useState('mosaic');
   const [mosaicSize, setMosaicSize] = useState(10);
   const [blurRadius, setBlurRadius] = useState(5);
 
-  // 使用撤销Hook管理选区
-  const [
-    selections,
-    setSelections,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    resetSelections,
-    selectionHistory
-  ] = useSelectionUndo([]);
+  // 撤销重做状态管理 - 使用单一状态源
+  const [appState, setAppState] = useState({
+    selections: [],
+    history: [[]],
+    historyIndex: 0
+  });
+
+  const { selections, history, historyIndex } = appState;
+
+  // 计算按钮状态 - 每次render都重新计算
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
+
+  
+  // 添加到历史记录
+  const addToHistory = (newSelections) => {
+    setAppState(prev => {
+      const newHistory = prev.history.slice(0, prev.historyIndex + 1);
+      newHistory.push([...newSelections]);
+      return {
+        selections: newSelections,
+        history: newHistory,
+        historyIndex: newHistory.length - 1
+      };
+    });
+  };
+
+  // 撤销
+  const undo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      const previousSelections = history[newIndex];
+      setAppState(prev => ({
+        ...prev,
+        selections: previousSelections,
+        historyIndex: newIndex
+      }));
+    }
+  };
+
+  // 重做
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      const nextSelections = history[newIndex];
+      setAppState(prev => ({
+        ...prev,
+        selections: nextSelections,
+        historyIndex: newIndex
+      }));
+    }
+  };
+
+  // 重置
+  const resetSelections = () => {
+    setAppState({
+      selections: [],
+      history: [[]],
+      historyIndex: 0
+    });
+  };
 
   // 启用撤销快捷键
   useUndoShortcuts(undo, redo, imageData !== null);
@@ -37,13 +89,18 @@ function App() {
 
   // 移除图片
   const handleRemoveImage = () => {
+    console.log('handleRemoveImage called'); // 调试信息
     setImageData(null);
     resetSelections();
+    console.log('Image removed and selections reset'); // 调试信息
   };
 
   // 处理选区变化
   const handleSelectionChange = (newSelections) => {
-    setSelections(newSelections);
+    // 只有当选区真的发生变化时才添加到历史
+    if (JSON.stringify(newSelections) !== JSON.stringify(selections)) {
+      addToHistory(newSelections);
+    }
   };
 
   // 撤销操作
@@ -108,11 +165,21 @@ function App() {
                   />
                 </svg>
               </div>
-              <h1 className="text-xl font-bold text-gray-900">图片打码工具</h1>
+              <h1 className="text-xl font-bold text-gray-900">{t('appTitle')}</h1>
             </div>
-
-            <div className="text-sm text-gray-500">
-              在线马赛克处理工具
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-500">{t('onlineSubtitle')}</div>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">{t('language')}</span>
+                <select
+                  value={lang}
+                  onChange={(e) => setLang(e.target.value)}
+                  className="text-sm border border-gray-300 rounded px-2 py-1"
+                >
+                  <option value="zh">{t('zhCN')}</option>
+                  <option value="en">{t('enUS')}</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -125,11 +192,9 @@ function App() {
             // 上传区域
             <div className="flex flex-col items-center justify-center py-12">
               <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  开始处理您的图片
-                </h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('startProcessing')}</h2>
                 <p className="text-gray-600 max-w-md">
-                  上传图片后，您可以自由选择需要打码的区域，支持马赛克和模糊两种效果
+                  {t('uploadHint')}
                 </p>
               </div>
 
@@ -142,42 +207,56 @@ function App() {
             </div>
           ) : (
             // 图片编辑区域
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* 左侧：图片和画布 */}
-              <div className="lg:col-span-3 space-y-4">
-                <ImagePreview
-                  imageData={imageData}
-                  onRemove={handleRemoveImage}
-                />
-
-                <MosaicCanvas
-                  imageData={imageData}
-                  onSelectionChange={handleSelectionChange}
-                  currentEffect={currentEffect}
-                  mosaicSize={mosaicSize}
-                  blurRadius={blurRadius}
-                />
+            <div className="space-y-6">
+              {/* 顶部信息栏 */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <h2 className="text-lg font-semibold text-gray-900">{t('editing')}</h2>
+                    {imageData && (
+                      <div className="text-sm text-gray-600">
+                        {imageData.name} • {imageData.width} × {imageData.height} px
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={handleRemoveImage} className="btn-secondary text-sm">{t('changeImage')}</button>
+                </div>
               </div>
 
-              {/* 右侧：工具栏 */}
-              <div className="lg:col-span-1 space-y-6">
-                <Toolbar
-                  currentEffect={currentEffect}
-                  onEffectChange={setCurrentEffect}
-                  mosaicSize={mosaicSize}
-                  onMosaicSizeChange={setMosaicSize}
-                  blurRadius={blurRadius}
-                  onBlurRadiusChange={setBlurRadius}
-                  onUndo={handleUndo}
-                  onRedo={handleRedo}
-                  canUndo={canUndo}
-                  canRedo={canRedo}
-                  onExport={handleExport}
-                  hasSelections={selections.length > 0}
-                />
+              {/* 主要编辑区域 */}
+              <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+                {/* 左侧：画布编辑区 */}
+                <div className="xl:col-span-3">
+                  <MosaicCanvas
+                    imageData={imageData}
+                    onSelectionChange={handleSelectionChange}
+                    currentEffect={currentEffect}
+                    mosaicSize={mosaicSize}
+                    blurRadius={blurRadius}
+                    selections={selections}
+                  />
+                </div>
 
-                {/* 联系我组件 */}
-                <ContactBlock />
+                {/* 右侧：工具栏 */}
+                <div className="xl:col-span-1 space-y-6">
+                  <Toolbar
+                    currentEffect={currentEffect}
+                    onEffectChange={setCurrentEffect}
+                    mosaicSize={mosaicSize}
+                    onMosaicSizeChange={setMosaicSize}
+                    blurRadius={blurRadius}
+                    onBlurRadiusChange={setBlurRadius}
+                    onUndo={handleUndo}
+                    onRedo={handleRedo}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                    onExport={handleExport}
+                    hasSelections={selections.length > 0}
+                  />
+
+                  {/* 联系我组件 */}
+                  <ContactBlock />
+                </div>
               </div>
             </div>
           )}
@@ -193,6 +272,14 @@ function App() {
         </div>
       </footer>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <I18nProvider>
+      <AppInner />
+    </I18nProvider>
   );
 }
 
