@@ -3,6 +3,7 @@ import ImageUploader from './components/ImageUploader';
 import ImagePreview from './components/ImagePreview';
 import MosaicCanvas from './components/MosaicCanvas';
 import Toolbar from './components/Toolbar';
+import ContactBlock from './components/ContactBlock';
 import { useSelectionUndo, useUndoShortcuts } from './hooks/useUndo';
 import { exportAndDownloadImage } from './utils/exportUtils';
 import './index.css';
@@ -133,6 +134,11 @@ function App() {
               </div>
 
               <ImageUploader onImageUpload={handleImageUpload} />
+
+              {/* 联系我组件 */}
+              <div className="mt-12">
+                <ContactBlock />
+              </div>
             </div>
           ) : (
             // 图片编辑区域
@@ -154,7 +160,7 @@ function App() {
               </div>
 
               {/* 右侧：工具栏 */}
-              <div className="lg:col-span-1">
+              <div className="lg:col-span-1 space-y-6">
                 <Toolbar
                   currentEffect={currentEffect}
                   onEffectChange={setCurrentEffect}
@@ -169,6 +175,9 @@ function App() {
                   onExport={handleExport}
                   hasSelections={selections.length > 0}
                 />
+
+                {/* 联系我组件 */}
+                <ContactBlock />
               </div>
             </div>
           )}
