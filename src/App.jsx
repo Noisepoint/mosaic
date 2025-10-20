@@ -1,19 +1,50 @@
 import React, { useState } from 'react';
 import ImageUploader from './components/ImageUploader';
 import ImagePreview from './components/ImagePreview';
+import MosaicCanvas from './components/MosaicCanvas';
+import Toolbar from './components/Toolbar';
 import './index.css';
 
 function App() {
   const [imageData, setImageData] = useState(null);
+  const [currentEffect, setCurrentEffect] = useState('mosaic');
+  const [mosaicSize, setMosaicSize] = useState(10);
+  const [blurRadius, setBlurRadius] = useState(5);
+  const [selections, setSelections] = useState([]);
 
   // 处理图片上传
   const handleImageUpload = (data) => {
     setImageData(data);
+    setSelections([]); // 重置选区
   };
 
   // 移除图片
   const handleRemoveImage = () => {
     setImageData(null);
+    setSelections([]);
+  };
+
+  // 处理选区变化
+  const handleSelectionChange = (newSelections) => {
+    setSelections(newSelections);
+  };
+
+  // 撤销操作
+  const handleUndo = () => {
+    // 将在Stage 4实现
+    console.log('Undo operation');
+  };
+
+  // 重做操作
+  const handleRedo = () => {
+    // 将在Stage 4实现
+    console.log('Redo operation');
+  };
+
+  // 导出图片
+  const handleExport = (options) => {
+    // 将在Stage 4实现
+    console.log('Export with options:', options);
   };
 
   return (
@@ -67,17 +98,36 @@ function App() {
             </div>
           ) : (
             // 图片编辑区域
-            <div className="space-y-6">
-              <ImagePreview
-                imageData={imageData}
-                onRemove={handleRemoveImage}
-              />
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* 左侧：图片和画布 */}
+              <div className="lg:col-span-3 space-y-4">
+                <ImagePreview
+                  imageData={imageData}
+                  onRemove={handleRemoveImage}
+                />
 
-              {/* 工具栏和画布区域将在后续实现 */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-800">
-                  ⚠️ 工具栏和编辑功能正在开发中...
-                </p>
+                <MosaicCanvas
+                  imageData={imageData}
+                  onSelectionChange={handleSelectionChange}
+                />
+              </div>
+
+              {/* 右侧：工具栏 */}
+              <div className="lg:col-span-1">
+                <Toolbar
+                  currentEffect={currentEffect}
+                  onEffectChange={setCurrentEffect}
+                  mosaicSize={mosaicSize}
+                  onMosaicSizeChange={setMosaicSize}
+                  blurRadius={blurRadius}
+                  onBlurRadiusChange={setBlurRadius}
+                  onUndo={handleUndo}
+                  onRedo={handleRedo}
+                  canUndo={false} // 将在Stage 4实现
+                  canRedo={false} // 将在Stage 4实现
+                  onExport={handleExport}
+                  hasSelections={selections.length > 0}
+                />
               </div>
             </div>
           )}
