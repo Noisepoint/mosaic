@@ -1,7 +1,7 @@
 // 联系我模块配置文件
 export const contactConfig = {
   // 管理员访问token（可自定义）
-  adminToken: 'admin123',
+  adminToken: 'secure_admin_token_2024',
 
   // 默认二维码图片路径
   defaultQrCode: '/qr-default.png',
