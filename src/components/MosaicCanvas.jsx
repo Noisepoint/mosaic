@@ -250,6 +250,40 @@ const MosaicCanvas = ({
     }
   };
 
+  // 触摸事件处理
+  const handleTouchStart = (e) => {
+    e.preventDefault(); // 防止页面滚动
+    const touch = e.touches[0];
+    const rect = overlayCanvasRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    const originalCoords = mapToOriginalCoords(x, y);
+
+    setIsDrawing(true);
+    setShowPreview(false); // 绘制中关闭重计算，避免卡顿
+    setStartPoint(originalCoords);
+
+    if (currentTool === 'rectangle') {
+      setCurrentRect({
+        x: originalCoords.x,
+        y: originalCoords.y,
+        width: 0,
+        height: 0,
+        type: 'rectangle'
+      });
+    } else if (currentTool === 'brush') {
+      // 涂抹笔功能 - 使用圆形刷点，记录中心和半径，渲染更顺滑
+      const brushSelection = {
+        cx: originalCoords.x,
+        cy: originalCoords.y,
+        r: Math.max(1, Math.floor(brushSize / 2)),
+        type: 'brush'
+      };
+      setSelections(prev => [...prev, brushSelection]);
+      setLastBrushPoint(originalCoords); // 设置初始点
+    }
+  };
+
   const handleMouseMove = (e) => {
     if (!isDrawing || !startPoint) return;
 
@@ -304,7 +338,83 @@ const MosaicCanvas = ({
     }
   };
 
+  const handleTouchMove = (e) => {
+    e.preventDefault(); // 防止页面滚动
+    if (!isDrawing || !startPoint) return;
+
+    const touch = e.touches[0];
+    const rect = overlayCanvasRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    const currentPoint = mapToOriginalCoords(x, y);
+
+    if (currentTool === 'rectangle') {
+      const width = currentPoint.x - startPoint.x;
+      const height = currentPoint.y - startPoint.y; // 触摸端不强制正方形
+
+      setCurrentRect({
+        x: width < 0 ? currentPoint.x : startPoint.x,
+        y: height < 0 ? currentPoint.y : startPoint.y,
+        width: Math.abs(width),
+        height: Math.abs(height),
+        type: 'rectangle'
+      });
+    } else if (currentTool === 'brush') {
+      // 涂抹笔连续绘制 - 插值填充空隙（圆形刷点）
+      if (lastBrushPoint) {
+        const distance = Math.sqrt(
+          Math.pow(currentPoint.x - lastBrushPoint.x, 2) +
+          Math.pow(currentPoint.y - lastBrushPoint.y, 2)
+        );
+
+        // 更密集的插值，步距小于等于笔刷半径的 1/3，避免断续
+        const stepSpacing = Math.max(1, Math.floor(brushSize / 4)); // <= r/2
+        const steps = Math.max(1, Math.ceil(distance / stepSpacing));
+
+        setSelections(prev => {
+          const next = [...prev];
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const interpolatedPoint = {
+              x: lastBrushPoint.x + (currentPoint.x - lastBrushPoint.x) * t,
+              y: lastBrushPoint.y + (currentPoint.y - lastBrushPoint.y) * t
+            };
+            next.push({
+              cx: interpolatedPoint.x,
+              cy: interpolatedPoint.y,
+              r: Math.max(1, Math.floor(brushSize / 2)),
+              type: 'brush'
+            });
+          }
+          return next;
+        });
+      }
+
+      setLastBrushPoint(currentPoint);
+    }
+  };
+
   const handleMouseUp = () => {
+    if (isDrawing && currentRect && currentRect.width > 5 && currentRect.height > 5) {
+      // 只有矩形选区有实际大小时才添加
+      const newSelections = [...selections, currentRect];
+      setSelections(newSelections);
+      onSelectionChange(newSelections);
+    }
+    // 画笔：在结束时统一提交一次，避免频繁重绘和历史爆炸
+    if (isDrawing && currentTool === 'brush') {
+      onSelectionChange(selections);
+    }
+
+    setIsDrawing(false);
+    setCurrentRect(null);
+    setStartPoint(null);
+    setLastBrushPoint(null); // 重置涂抹笔状态
+    setShowPreview(true); // 恢复预览
+  };
+
+  const handleTouchEnd = (e) => {
+    e.preventDefault(); // 防止页面滚动
     if (isDrawing && currentRect && currentRect.width > 5 && currentRect.height > 5) {
       // 只有矩形选区有实际大小时才添加
       const newSelections = [...selections, currentRect];
@@ -445,12 +555,18 @@ const MosaicCanvas = ({
           <canvas
             ref={overlayCanvasRef}
             className="border border-gray-300 cursor-crosshair shadow-lg"
-            style={{ position: 'absolute' }}
+            style={{ 
+              position: 'absolute',
+              touchAction: 'none' // 防止页面滚动和缩放
+            }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
             onDoubleClick={handleDoubleClick}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           />
         </div>
 
