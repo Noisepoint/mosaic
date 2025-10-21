@@ -116,8 +116,10 @@ export const exportAndDownloadImage = async (imageData, selections, effectOption
     // 创建导出图片
     const dataUrl = await createExportedImage(imageData, selections, effectOptions, exportOptions);
 
-    // 下载图片
-    downloadImage(dataUrl, filename);
+    // 延迟下载，确保用户看到提示
+    setTimeout(() => {
+      downloadImage(dataUrl, filename);
+    }, 100);
 
     return { success: true, filename, dataUrl };
 

@@ -134,6 +134,7 @@ function AppInner() {
 
       if (result.success) {
         console.log('图片导出成功:', result.filename);
+        alert(`导出成功！文件名: ${result.filename}`);
       } else {
         alert(`导出失败: ${result.error}`);
       }
